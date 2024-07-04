@@ -38,6 +38,7 @@ async def transcribe(file: UploadFile = File(...)):
 async def transcribe(file: UploadFile = File(...), labels: List[str] = Form(...)):
     # Save the uploaded audio file
     audio_path = f"temp_{file.filename}"
+    print(labels)
     with open(audio_path, "wb") as buffer:
         buffer.write(await file.read())
 

@@ -17,6 +17,48 @@ import re
 import inflect
 from collections import defaultdict
 
+# Sample Dictionary, make it a file when finalized.
+# numberTagalog_MTO1 = {
+#     # QUESTION 1
+#     "Question 1":
+#         {
+#             "one" : "1",
+#             "isa" : "1",
+#             "isa lang": "1",
+#             "two" : "2",
+#             "dalawa" : "2",
+#             "dalawa lang" : "2"
+#         }
+#     , 
+
+#     "Question 2": 
+#         {
+#             # sample with many synonyms
+#             "mga dalawang araw": "2-3 na araw",
+#             "dalawang araw": "2-3 na araw",
+#             "tatlong araw": "2-3 na araw", 
+#             "mga tatlong araw": "2-3 na araw", 
+#             "dalawa": "2-3 na araw",
+#             "tatlo": "2-3 na araw",
+        
+#             # sample with few synonyms
+#             "apat na araw": "4-6 na araw",
+#             "mga anim": "4-6 na araw"
+#         }
+#     ,
+
+#     "Question 3": 
+#         {
+#             "oo": "Oo",
+#             "yes": "Oo",
+#             "oh": "Oo",
+
+#             "hindi": "Hindi",
+#             "no": "Hindi",
+#             "dili": "Hindi"
+#         }
+# }
+
 
 app = FastAPI()
 
@@ -218,10 +260,11 @@ async def transcribe(
         text: Optional[str] = Form(None),
         speaker: str = Form(...),
         language: str = Form(...),
+        prompt: Optional[str] = Form(None),
         choices: Optional[str] = Form(None)  # Accept choices as a JSON string
 ):
     # Log the payload to the console
-    print(f"Received payload - Text: {text}, Speaker: {speaker}, Language: {language}, File: {file.filename if file else 'None'}, Choices: {choices}")
+    print(f"Received payload - Text: {text}, Speaker: {speaker}, Language: {language}, File: {file.filename if file else 'None'}, Choices: {choices}, Prompt: {prompt}")
 
     response = {}
 
@@ -283,6 +326,8 @@ async def transcribe(
                     #     "score": score,
                     #     "choices": parsed_choices
                     # }
+                    print(response)
+
                     response = match
 
                 else:

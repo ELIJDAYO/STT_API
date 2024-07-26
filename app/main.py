@@ -5,7 +5,7 @@ import librosa
 import torch
 from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
 from labels import tagalog_labels
-from dictionaries import dictionaryTagalogRanges, numericals
+from dictionaries import dictionaryTagalogRanges, numericals, synonyms
 from expected_labels import tagalog_expected_labels
 from fuzzywuzzy import process
 from typing import List, Optional
@@ -18,46 +18,54 @@ import inflect
 from collections import defaultdict
 
 # Sample Dictionary, make it a file when finalized.
-# numberTagalog_MTO1 = {
-#     # QUESTION 1
-#     "Question 1":
-#         {
-#             "one" : "1",
-#             "isa" : "1",
-#             "isa lang": "1",
-#             "two" : "2",
-#             "dalawa" : "2",
-#             "dalawa lang" : "2"
-#         }
-#     , 
+numberTagalog_MTO1 = {
+    # QUESTION 1
+    "Question 1":
+        {
+            "one" : "1",
+            "isa" : "1",
+            "isa lang": "1",
+            "two" : "2",
+            "dalawa" : "2",
+            "dalawa lang" : "2"
+        }
+    , 
 
-#     "Question 2": 
-#         {
-#             # sample with many synonyms
-#             "mga dalawang araw": "2-3 na araw",
-#             "dalawang araw": "2-3 na araw",
-#             "tatlong araw": "2-3 na araw", 
-#             "mga tatlong araw": "2-3 na araw", 
-#             "dalawa": "2-3 na araw",
-#             "tatlo": "2-3 na araw",
+    "Question 2": 
+        {
+            # sample with many synonyms
+            "mga dalawang araw": "2-3 na araw",
+            "dalawang araw": "2-3 na araw",
+            "tatlong araw": "2-3 na araw", 
+            "mga tatlong araw": "2-3 na araw", 
+            "dalawa": "2-3 na araw",
+            "tatlo": "2-3 na araw",
         
-#             # sample with few synonyms
-#             "apat na araw": "4-6 na araw",
-#             "mga anim": "4-6 na araw"
-#         }
-#     ,
+            # sample with few synonyms
+            "apat na araw": "4-6 na araw",
+            "mga anim": "4-6 na araw"
+        }
+    ,
 
-#     "Question 3": 
-#         {
-#             "oo": "Oo",
-#             "yes": "Oo",
-#             "oh": "Oo",
+    "Question 3": 
+        {
+            "oo": "Oo",
+            "yes": "Oo",
+            "oh": "Oo",
 
-#             "hindi": "Hindi",
-#             "no": "Hindi",
-#             "dili": "Hindi"
-#         }
-# }
+            "hindi": "Hindi",
+            "no": "Hindi",
+            "dili": "Hindi"
+        }
+    ,
+
+    "Anong lenguahe ang gagamitin natin?":
+        {
+            "filipino": "Filipino",
+            "english": "English",
+            "cebuano": "Cebuano"
+        }
+}
 
 
 app = FastAPI()
@@ -155,6 +163,23 @@ def map_transcripts(transcript, labels, expected_labels=None):
             return trans_str, None, 0
     else:
         return trans_str, None, 0
+    
+def map_transcripts3(transcripts, labels):
+    mapped_results = []
+    for trans in transcripts:
+        trans_str = ' '.join(trans)
+        trans_length = len(trans_str)
+        
+        filtered_labels = [label for label in labels if abs(len(label) - trans_length) <= 5]
+        
+        if filtered_labels:
+            match, score = process.extractOne(trans_str, filtered_labels)
+            result = process.extract(trans_str, filtered_labels)
+            mapped_results.append((trans_str, match, score))
+        else:
+            mapped_results.append((trans_str, None, 0))
+            
+    return mapped_results
 
 # ------------------------------------------------------------------------------------------------
 # --------------------Accepting Choices from FilBis-----------------------------------------------
@@ -306,37 +331,59 @@ async def transcribe(
             audio_path = f"./audio_files/{file.filename}"
             with open(audio_path, "wb") as buffer:
                 buffer.write(audio_data)
+            
+            value_to_keys = defaultdict(list)
+
+            # inidcate the current question 
+            currQ = prompt
+
+            print('currq')
+
+            if(prompt in synonyms):
+                for key, value in synonyms[currQ].items():
+                    value_to_keys[value].append(key)
+
+                print(value_to_keys)
+
+            synonyms_list = []
+
+            for key, value in value_to_keys.items():
+                for res in value: 
+                    synonyms_list.append(res)
+
+            # Matching criteria for transcribing process
+            print(synonyms_list)
 
             # Perform transcription
-            transcription = show_transcription2(model, processor, audio_path)
+            transcription = show_transcription(model, processor, audio_path)
             if transcription is None:
                 response = {"error": "Failed to transcribe audio"}
             else:
                 # Assuming tagalog_labels and expected_labels are defined elsewhere
-                if parsed_choices:
-                    # TODO
-                    # Need help in code-switching and synonyms, range values
-                    # Please check the map_transcripts and dictionaries.py
-                    trans_str, match, score = map_transcripts(transcription, parsed_choices)
+                print(f'TRANS: {transcription}')
 
-                    # Use the line below for debugging
-                    # response = {
-                    #     "transcription": trans_str,
-                    #     "match": match,
-                    #     "score": score,
-                    #     "choices": parsed_choices
-                    # }
-                    print(response)
+                trans_str, match, score = map_transcripts(transcription, synonyms_list)
 
-                    response = match
+                # Use the line below for debugging
+                # response = {
+                #     "transcription": trans_str,
+                #     "match": match,
+                #     "score": score,
+                #     "choices": parsed_choices
+                # }
+                response = match
 
-                else:
-                    # TODO
-                    # This code block is for the open-ended question. It happens when choice array is empty.
-                    # We're lacking context such as misspelled letters in Filipino and understanding the prompts when
-                    # looking for desired transcription output (e.g. age, weight, school location)
-                    # Typing is also strict for some prompts
-                    response = transcription
+                # Removed for now since using a different structure which doesn't involve parsed choices 
+                # if parsed_choices:
+                    
+
+                # else:
+                #     # TODO
+                #     # This code block is for the open-ended question. It happens when choice array is empty.
+                #     # We're lacking context such as misspelled letters in Filipino and understanding the prompts when
+                #     # looking for desired transcription output (e.g. age, weight, school location)
+                #     # Typing is also strict for some prompts
+                #     response = transcription
         except Exception as e:
             response = {"error": f"Failed to process audio file: {e}"}
     else:
